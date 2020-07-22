@@ -3,7 +3,7 @@ import { AzureFunction, Context, HttpRequest } from "@azure/functions"
 const httpTrigger: AzureFunction = async function (context: Context, req: HttpRequest): Promise<void> {
     context.log('Got request');
     if (req.body && req.body.userName && req.body.frames && req.body.routeContent) {
-        const { frames, routeContent } = req.body;
+        const { userName, frames, routeContent } = req.body;
         context.log('Sanity checking route contents...');
         if (routeContent.length > 100000) {
             context.res = {
@@ -27,7 +27,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                 await fetch(process.env["DiscordWebhook"], {
                     method: 'post',
                     body: JSON.stringify({
-                        content: "A new fastest recipe route was found by " + userName + " that is " + req.body.frames + " frames, an improvement of " + (bestFrames - req.body.frames) + " frames over the previous record."
+                        content: "A new fastest recipe route was found by " + userName + " that is " + frames + " frames, an improvement of " + (bestFrames - frames) + " frames over the previous record."
                     }),
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -37,7 +37,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
         } else {
             context.res = {
                 status: 400,
-                body: "This file does not beat the current known fastest record."
+                body: "This file does not beat the current known fastest record, or the frames value is invalid."
             };
             context.done();
             return;
