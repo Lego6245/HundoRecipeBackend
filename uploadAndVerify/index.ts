@@ -1,10 +1,10 @@
 import { AzureFunction, Context, HttpRequest } from "@azure/functions"
 import * as ftp from 'basic-ftp';
 import { promises as fsPromises } from 'fs';
+import * as fetch from 'node-fetch';
 
 const httpTrigger: AzureFunction = async function (context: Context, req: HttpRequest): Promise<void> {
     const file_name_regex = /\[([^\s\]]*)\]/;
-    context.log('Got request');
     if (req.body && req.body.frames && req.body.routeContent) {
         context.log('Sanity checking route contents...');
         if (req.body.routeContent.length > 100000) {
@@ -47,6 +47,16 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             await fsPromises.writeFile(tempDir, req.body.routeContent);
             await ftpClient.upload(tempDir, fileName);
             await fsPromises.unlink(tempDir);
+            context.log('Got request');
+            if (process.env["DiscordWebhook"]) {
+                await fetch(process.env["DiscordWebhook"], {
+                    method: 'post',
+                    body: JSON.stringify({
+                        content: "A new fastest recipe route was found by " + userName + " that is " + req.body.frames + " frames, an improvement of " + (bestFrames - req.body.frames) + " frames over the previous record."
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
         } else {
             context.res = {
                 status: 200,
