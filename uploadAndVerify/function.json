@@ -13,6 +13,20 @@
       "type": "http",
       "direction": "out",
       "name": "res"
+    },
+    {
+      "type": "blob",
+      "name": "newRecipe",
+      "path": "foundpaths/[{frames}]_{userName}.txt",
+      "connection": "AzureWebJobsStorage",
+      "direction": "out"
+    },
+    {
+      "type": "blob",
+      "name": "fastestTime",
+      "path": "foundpaths/fastestFrames.txt",
+      "connection": "AzureWebJobsStorage",
+      "direction": "in"
     }
   ],
   "scriptFile": "../dist/uploadAndVerify/index.js"
