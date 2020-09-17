@@ -1,6 +1,7 @@
 {
-  "name": "",
-  "version": "",
+  "name": "HundoRecipeBackend",
+  "version": "1.0.0",
+  "license": "MIT",
   "scripts": {
     "build": "tsc",
     "build:production": "npm run prestart && npm prune --production",
@@ -19,6 +20,6 @@
   },
   "dependencies": {
     "basic-ftp": "^4.6.2",
-    "node-fetch": "^2.6.0"
+    "node-fetch": "^2.6.1"
   }
 }
