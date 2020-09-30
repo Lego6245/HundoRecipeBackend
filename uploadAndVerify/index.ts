@@ -7,9 +7,60 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
         const { userName, frames, routeContent } = req.body;
         context.log('Sanity checking route contents...');
         if (routeContent.length > 100000) {
+            context.log('Size too big. Over 100k bytes with size ' + routeContent.length);
             context.res = {
                 status: 400,
-                body: "The file is (seemingly) too big. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+            };
+            context.done();
+            return;
+        }
+        if (routeContent.length < 10000) {
+            context.log('Size too small. Under 10k bytes with size ' + routeContent.length);
+            context.res = {
+                status: 400,
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+            };
+            context.done();
+            return;
+        }
+        const splitContents = routeContent.split('\n');
+        if (!!splitContents) {
+            const splitMe = splitContents[splitContents.length - 1].length > 5 ? splitContents[splitContents.length - 1] : splitContents[splitContents.length - 2]
+            const tabContents = splitMe.split('\t');
+            if (!!tabContents) {
+                if (tabContents[2] != frames) {
+                    context.log('Frame count did not match on last line.');
+                    context.res = {
+                        status: 400,
+                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                    };
+                    context.done();
+                    return;
+                }
+                if (tabContents[0].indexOf('<Mistake>') < 0) {
+                    context.log('No mistake as last item made.');
+                    context.res = {
+                        status: 400,
+                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                    };
+                    context.done();
+                    return;
+                }
+            } else {
+                context.log('Error splitting tab contents');
+                context.res = {
+                    status: 400,
+                    body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                };
+                context.done();
+                return;
+            }
+        } else {
+            context.log('Error splitting route contents');
+            context.res = {
+                status: 400,
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
             };
             context.done();
             return;
