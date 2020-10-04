@@ -158,6 +158,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                     body: "Sorry, you were not the fastest. There was also an error updating the leaderboards. UUID: " + uuid
                 };
             }
+
             context.done();
             return;
         } else {
