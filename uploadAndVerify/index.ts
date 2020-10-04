@@ -1,18 +1,21 @@
 import { AzureFunction, Context, HttpRequest } from "@azure/functions";
 import { createTableService, TableUtilities } from 'azure-storage';
 import { promisify } from 'util';
+import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
 
 const httpTrigger: AzureFunction = async function (context: Context, req: HttpRequest): Promise<void> {
     context.log('Got request');
+    const uuid = uuidv4();
     if (req.body && req.body.userName && req.body.frames && req.body.routeContent) {
         const { userName, frames, routeContent } = req.body;
         context.log('Sanity checking route contents...');
+        context.log(uuid);
         if (routeContent.length > 100000) {
             context.log('Size too big. Over 100k bytes with size ' + routeContent.length);
             context.res = {
                 status: 400,
-                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
             };
             context.done();
             return;
@@ -21,7 +24,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             context.log('Size too small. Under 10k bytes with size ' + routeContent.length);
             context.res = {
                 status: 400,
-                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
             };
             context.done();
             return;
@@ -35,7 +38,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                     context.log('Frame count did not match on last line.');
                     context.res = {
                         status: 400,
-                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
                     };
                     context.done();
                     return;
@@ -44,7 +47,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                     context.log('No mistake as last item made.');
                     context.res = {
                         status: 400,
-                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                        body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
                     };
                     context.done();
                     return;
@@ -53,7 +56,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                 context.log('Error splitting tab contents');
                 context.res = {
                     status: 400,
-                    body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                    body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
                 };
                 context.done();
                 return;
@@ -62,7 +65,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             context.log('Error splitting route contents');
             context.res = {
                 status: 400,
-                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
             };
             context.done();
             return;
@@ -98,11 +101,11 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             } catch (error) {
                 context.log('Error finding leaderboard table');
                 context.log(error);
-                context.done();
                 context.res = {
                     status: 400,
-                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards."
+                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards. UUID: " + uuid
                 };
+                context.done();
                 return;
             }
             context.log('Table found');
@@ -117,11 +120,11 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                 const row = await promiseRetrieveEntitiy('fastestLeaderboard', 'frameCount', userName);
                 if ((row as any).numFrames._ <= numberFrames) {
                     context.log('Leaderboard already has a faster record for ' + userName);
-                    context.done();
                     context.res = {
                         status: 200,
                         body: "Sorry, you were not the fastest, and your record was not faster than your current known fastest."
                     };
+                    context.done();
                     return;
                 }
             } catch (error) {
@@ -152,7 +155,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
                 context.log(error);
                 context.res = {
                     status: 400,
-                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards."
+                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards. UUID: " + uuid
                 };
             }
 
@@ -161,7 +164,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
         } else {
             context.res = {
                 status: 400,
-                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord."
+                body: "There was an error with your file. If you're confident this file is accurate, please notify someone in the TTYD discord. UUID: " + uuid
             };
             context.done();
             return;
@@ -169,7 +172,7 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
     } else {
         context.res = {
             status: 400,
-            body: "Invalid request shape."
+            body: "Invalid request shape. UUID: " + uuid
         };
         context.done();
         return;
