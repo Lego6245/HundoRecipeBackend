@@ -9,8 +9,10 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
     const uuid = uuidv4();
     if (req.body && req.body.userName && req.body.frames && req.body.routeContent) {
         const { userName, frames, routeContent } = req.body;
+        context.log('request from ' + userName + " for " + frames + " frames.");
         context.log('Sanity checking route contents...');
         context.log(uuid);
+        // Length validation
         if (routeContent.length > 100000) {
             context.log('Size too big. Over 100k bytes with size ' + routeContent.length);
             context.res = {
@@ -29,6 +31,8 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             context.done();
             return;
         }
+
+        // Validate contents of the route.
         const splitContents = routeContent.split('\n');
         if (!!splitContents) {
             const splitMe = splitContents[splitContents.length - 1].length > 5 ? splitContents[splitContents.length - 1] : splitContents[splitContents.length - 2]
@@ -70,6 +74,8 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             context.done();
             return;
         }
+        
+        // Check # of frames.
         const bestFrames = parseInt(context.bindings.fastestTime);
         context.log('Current max frames: ' + bestFrames);
         const numberFrames = parseInt(frames);
@@ -77,90 +83,70 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
             if (bestFrames > numberFrames) {
                 context.log('New best found, writing output...');
                 context.bindings.newRecipe = routeContent;
-                context.res = {
-                    status: 200,
-                    body: "New fastest record uploaded to server."
-                };
-                if (process.env["DiscordWebhook"]) {
-                    await fetch(process.env["DiscordWebhook"], {
-                        method: 'post',
-                        body: JSON.stringify({
-                            content: "A new fastest recipe route was found by " + userName + " that is " + frames + " frames, an improvement of " + (bestFrames - frames) + " frames over the previous record."
-                        }),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                }
-            }
-            const tableService = createTableService(process.env["AzureWebJobsStorage"]);
-            const promiseCreateTable = promisify((tableName, callback) => tableService.createTableIfNotExists(
-                tableName,
-                (error, result, other_stuff) => callback(error, result)
-            ));
-            try {
-                await promiseCreateTable('fastestLeaderboard');
-            } catch (error) {
-                context.log('Error finding leaderboard table');
-                context.log(error);
-                context.res = {
-                    status: 400,
-                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards. UUID: " + uuid
-                };
-                context.done();
-                return;
-            }
-            context.log('Table found');
-
-            const promiseRetrieveEntitiy = promisify((table, partKey, rowKey, cb) => tableService.retrieveEntity(
-                table,
-                partKey,
-                rowKey,
-                (error, result, other_stuff) => cb(error, result)
-            ));
-            try {
-                const row = await promiseRetrieveEntitiy('fastestLeaderboard', 'frameCount', userName);
-                if ((row as any).numFrames._ <= numberFrames) {
-                    context.log('Leaderboard already has a faster record for ' + userName);
+                try {
+                    const updateLeaderboardResult = await updateLeaderboard(userName, numberFrames);
+                    if (updateLeaderboardResult) {
+                        context.res = {
+                            status: 200,
+                            body: "New fastest record uploaded to server."
+                        };
+                        if (bestFrames > numberFrames) {
+                            if (process.env["DiscordWebhook"]) {
+                                await fetch(process.env["DiscordWebhook"], {
+                                    method: 'post',
+                                    body: JSON.stringify({
+                                        content: "A new fastest recipe route was found by " + userName + " that is " + frames + " frames, an improvement of " + (bestFrames - frames) + " frames over the previous record."
+                                    }),
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                            }
+                        }
+                        context.done();
+                        return;
+                    } else {
+                        context.res = {
+                            status: 400,
+                            body: "There was some error with attempting to update the leaderboard. You may have a current fastest record. Please notify someone in the TTYD discord. UUID: " + uuid
+                        };
+                        context.done();
+                        return;
+                    }
+                } catch (e) {
                     context.res = {
-                        status: 200,
-                        body: "Sorry, you were not the fastest, and your record was not faster than your current known fastest."
+                        status: 400,
+                        body: "There was some error with attempting to update the leaderboard. You may have a current fastest record. Please notify someone in the TTYD discord. UUID: " + uuid
                     };
                     context.done();
                     return;
                 }
-            } catch (error) {
-                context.log('Some unimportant error retriving the row');
-                context.log(error);
+            } else {
+                context.log('Current framecount does not exceed fastest, but may exceed user current record. Updating LB...');
+                try {
+                    const updateLeaderboardResult = await updateLeaderboard(userName, numberFrames);
+                    if (updateLeaderboardResult && updateLeaderboardResult > numberFrames) {
+                        context.res = {
+                            status: 200,
+                            body: "You did not set a new WR, but you did set a new PB of " + numberFrames + ", beating your previous record by " + (updateLeaderboardResult - numberFrames) + ". If your result is in the top 50, you will be on the website!"
+                        };
+                        context.done();
+                        return;
+                    } else {
+                        context.res = {
+                            status: 200,
+                            body: "You did not set a new PB. The server's current PB for you is " + updateLeaderboardResult ?? "unknown" + "."
+                        };
+                        context.done();
+                        return;
+                    }
+                } catch (e) {
+                    context.res = {
+                        status: 400,
+                        body: "There was some error with attempting to update the leaderboard. You may have a new PB (but not a WR). Please notify someone in the TTYD discord. UUID: " + uuid
+                    };
+                    context.done();
+                    return;
+                }
             }
-
-            const entGen = TableUtilities.entityGenerator;
-            const newEnt = {
-                PartitionKey: entGen.String('frameCount'),
-                RowKey: entGen.String(userName),
-                numFrames: numberFrames,
-            }
-            const promiseInsertOrReplace = promisify((table, entity, cb) => tableService.insertOrReplaceEntity(
-                table,
-                entity,
-                (error, result, other_stuff) => cb(error, result)
-            ));
-            try {
-                await promiseInsertOrReplace('fastestLeaderboard', newEnt);
-                context.log('Leaderboard updated with new frame record for ' + userName + ' : ' + numberFrames);
-                context.res = {
-                    status: 200,
-                    body: "Sorry, you were not the fastest. However, you did set a new personal best, so the leaderboard was updated."
-                };
-            } catch (error) {
-                context.log('There was an error updating the leaderboard for ' + userName);
-                context.log(error);
-                context.res = {
-                    status: 400,
-                    body: "Sorry, you were not the fastest. There was also an error updating the leaderboards. UUID: " + uuid
-                };
-            }
-
-            context.done();
-            return;
         } else {
             context.res = {
                 status: 400,
@@ -178,5 +164,57 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
         return;
     }
 };
+
+async function updateLeaderboard(userName: string, numberFrames: number): Promise<number> {
+    const tableService = createTableService(process.env["AzureWebJobsStorage"]);
+    const promiseCreateTable = promisify((tableName, callback) => tableService.createTableIfNotExists(
+        tableName,
+        (error, result, other_stuff) => callback(error, result)
+    ));
+    try {
+        await promiseCreateTable('fastestLeaderboard');
+    } catch (error) {
+        throw Error('Error updating leaderboard: Unable to locate / create table.')
+    }
+
+    const promiseRetrieveEntitiy = promisify((table, partKey, rowKey, cb) => tableService.retrieveEntity(
+        table,
+        partKey,
+        rowKey,
+        (error, result, other_stuff) => cb(error, result)
+    ));
+
+    let oldFramecount;
+    try {
+        const row = await promiseRetrieveEntitiy('fastestLeaderboard', 'frameCount', userName);
+        oldFramecount = (row as any).numFrames._;
+        if (oldFramecount <= numberFrames) {
+            // Not a new fastest.
+            return oldFramecount;
+        }
+    } catch (error) {
+        // Ignore this error, it means there's no entity yet.
+    }
+
+    const entGen = TableUtilities.entityGenerator;
+    const newEnt = {
+        PartitionKey: entGen.String('frameCount'),
+        RowKey: entGen.String(userName),
+        numFrames: numberFrames,
+    }
+    const promiseInsertOrReplace = promisify((table, entity, cb) => tableService.insertOrReplaceEntity(
+        table,
+        entity,
+        (error, result, other_stuff) => cb(error, result)
+    ));
+
+    try {
+        await promiseInsertOrReplace('fastestLeaderboard', newEnt);
+    } catch (error) {
+        throw Error('Error updating leaderboard: Unable to insert / update row.')
+    }
+
+    return oldFramecount;
+}
 
 export default httpTrigger;
